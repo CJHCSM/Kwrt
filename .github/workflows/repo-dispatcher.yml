@@ -16,8 +16,8 @@ on:
   #   branches:
   #     - master
   # 定时任务，每天 18:30 触发（当前注释掉了）
-  #schedule:
-  #  - cron: 30 18 * * *
+  schedule:
+    - cron: 30 18 * * *
   # 手动触发工作流，可输入参数
   workflow_dispatch:
     inputs:
