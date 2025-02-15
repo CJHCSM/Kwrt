@@ -1,58 +1,80 @@
 #=================================================
 # https://github.com/P3TERX/Actions-OpenWrt
-# Description: Build OpenWrt using GitHub Actions
-# Lisence: MIT
-# Author: P3TERX
-# Blog: https://p3terx.com
+# 描述: 使用 GitHub Actions 构建 OpenWrt
+# 许可证: MIT
+# 作者: P3TERX
+# 博客: https://p3terx.com
 #=================================================
 
+# 工作流名称
 name: Repo Dispatcher
 
+# 触发工作流的事件
 on: 
+  # 当推送到 master 分支时触发（当前注释掉了）
   # push: 
   #   branches:
   #     - master
+  # 定时任务，每天 18:30 触发（当前注释掉了）
   #schedule:
   #  - cron: 30 18 * * *
+  # 手动触发工作流，可输入参数
   workflow_dispatch:
     inputs:
       param:
-        description: 'parameter'
+        description: '参数'
         required: false
         default: ''
 
+# 环境变量
 env:
+  # 从 GitHub 仓库的 secrets 中获取 TOKEN_KIDDIN9
   TOKEN_KIDDIN9: ${{ secrets.TOKEN_KIDDIN9 }}
+  # 设置时区为亚洲/上海
   TZ: Asia/Shanghai
 
+# 工作流中的作业
 jobs:
   build:
+    # 在最新的 Ubuntu 环境中运行
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout
+    - name: 检出代码
+      # 使用 actions/checkout 动作检出仓库代码
       uses: actions/checkout@main
 
-    - name: cancel running workflows
+    - name: 取消正在运行的工作流
+      # 使用 styfle/cancel-workflow-action 动作取消正在运行的工作流
       uses: styfle/cancel-workflow-action@main
+      # 仅当输入参数中包含 'cw' 时执行此步骤
       if: contains(github.event.inputs.param, 'cw')
       with:
+        # 取消所有工作流
         workflow_id: all
+        # 使用 TOKEN_KIDDIN9 作为访问令牌
         access_token: ${{ secrets.TOKEN_KIDDIN9 }}
 
-    - name: Load Settings.ini
+    - name: 加载 Settings.ini 文件
       run: |
+        # 加载公共的 settings.ini 文件
         source "${GITHUB_WORKSPACE}/devices/common/settings.ini"
+        # 如果存在特定目标的 settings.ini 文件，则加载该文件
         if [ -f "devices/${{matrix.target}}/settings.ini" ]; then
           source "${GITHUB_WORKSPACE}/devices/${{matrix.target}}/settings.ini"
         fi
+        # 将 REPO_URL 和 REPO_BRANCH 变量添加到环境变量中
         echo "REPO_URL=${REPO_URL}" >> $GITHUB_ENV
         echo "REPO_BRANCH=${REPO_BRANCH}" >> $GITHUB_ENV
 
-    - name: Trigger Packages Update
+    - name: 触发软件包更新
       run: |
+        # 获取 kiddin9/kwrt-packages 仓库最新工作流的创建时间
         gitdate=$(curl -H "Authorization: token ${{ secrets.TOKEN_KIDDIN9 }}" -s "https://api.github.com/repos/kiddin9/kwrt-packages/actions/runs" | jq -r '.workflow_runs[0].created_at')
+        # 将时间转换为时间戳
         gitdate=$(date -d "$gitdate" +%s)
+        # 获取当前时间的时间戳
         now=$(date -d "$(date)" +%s)
+        # 如果最新工作流创建时间超过 2 分钟，则触发软件包更新
         if [[ $(expr $gitdate + 120) < $now ]]; then
         curl -X POST https://api.github.com/repos/kiddin9/kwrt-packages/dispatches \
         -H "Accept: application/vnd.github.everest-preview+json" \
@@ -60,131 +82,17 @@ jobs:
         --data '{"event_type": "update"}'
         fi
 
-    - name: Trigger Compile
+    - name: 触发编译
       run: |
+        # 设置系统时区
         sudo timedatectl set-timezone "$TZ"
+        # 定义需要触发编译的目标列表，这里只保留ramips_mt7621
+        targets=(ramips_mt7621)
+        # 遍历目标列表，触发每个目标的编译
+        for target in "${targets[@]}"; do
           curl \
           -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
           -H "Accept: application/vnd.github.everest-preview+json" \
           -H "Authorization: token ${{ secrets.TOKEN_KIDDIN9 }}" \
-          -d '{"event_type": "x86_64 ${{ github.event.inputs.param }}", "client_payload": {"target": "x86_64"}}'
-          curl \
-          -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -H "Accept: application/vnd.github.everest-preview+json" \
-          -H "Authorization: token ${{ secrets.TOKEN_KIDDIN9 }}" \
-          -d '{"event_type": "x86_generic ${{ github.event.inputs.param }}", "client_payload": {"target": "x86_generic"}}'
-          curl \
-          -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -H "Accept: application/vnd.github.everest-preview+json" \
-          -H "Authorization: token ${{ secrets.TOKEN_KIDDIN9 }}" \
-          -d '{"event_type": "rockchip_armv8 ${{ github.event.inputs.param }}", "client_payload": {"target": "rockchip_armv8"}}'
-          curl \
-          -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -H "Accept: application/vnd.github.everest-preview+json" \
-          -H "Authorization: token ${{ secrets.TOKEN_KIDDIN9 }}" \
-          -d '{"event_type": "bcm27xx_bcm2712 ${{ github.event.inputs.param }}", "client_payload": {"target": "bcm27xx_bcm2712"}}'
-          curl \
-          -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -H "Accept: application/vnd.github.everest-preview+json" \
-          -H "Authorization: token ${{ secrets.TOKEN_KIDDIN9 }}" \
-          -d '{"event_type": "bcm27xx_bcm2711 ${{ github.event.inputs.param }}", "client_payload": {"target": "bcm27xx_bcm2711"}}'
-          curl \
-          -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -H "Accept: application/vnd.github.everest-preview+json" \
-          -H "Authorization: token ${{ secrets.TOKEN_KIDDIN9 }}" \
-          -d '{"event_type": "bcm27xx_bcm2710 ${{ github.event.inputs.param }}", "client_payload": {"target": "bcm27xx_bcm2710"}}'
-          curl \
-          -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -H "Accept: application/vnd.github.everest-preview+json" \
-          -H "Authorization: token ${{ secrets.TOKEN_KIDDIN9 }}" \
-          -d '{"event_type": "bcm27xx_bcm2709 ${{ github.event.inputs.param }}", "client_payload": {"target": "bcm27xx_bcm2709"}}'
-          curl \
-          -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -H "Accept: application/vnd.github.everest-preview+json" \
-          -H "Authorization: token ${{ secrets.TOKEN_KIDDIN9 }}" \
-          -d '{"event_type": "bcm27xx_bcm2708 ${{ github.event.inputs.param }}", "client_payload": {"target": "bcm27xx_bcm2708"}}'
-          curl \
-          -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -H "Accept: application/vnd.github.everest-preview+json" \
-          -H "Authorization: token ${{ secrets.TOKEN_KIDDIN9 }}" \
-          -d '{"event_type": "armsr_armv8 ${{ github.event.inputs.param }}", "client_payload": {"target": "armsr_armv8"}}'
-          curl \
-          -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -H "Accept: application/vnd.github.everest-preview+json" \
-          -H "Authorization: token ${{ secrets.TOKEN_KIDDIN9 }}" \
-          -d '{"event_type": "mediatek_mt7622 ${{ github.event.inputs.param }}", "client_payload": {"target": "mediatek_mt7622"}}'
-          curl \
-          -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -H "Accept: application/vnd.github.everest-preview+json" \
-          -H "Authorization: token ${{ secrets.TOKEN_KIDDIN9 }}" \
-          -d '{"event_type": "mediatek_filogic ${{ github.event.inputs.param }}", "client_payload": {"target": "mediatek_filogic"}}'
-          curl \
-          -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -H "Accept: application/vnd.github.everest-preview+json" \
-          -H "Authorization: token ${{ secrets.TOKEN_KIDDIN9 }}" \
-          -d '{"event_type": "qualcommax_ipq50xx ${{ github.event.inputs.param }}", "client_payload": {"target": "qualcommax_ipq50xx"}}'
-          curl \
-          -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -H "Accept: application/vnd.github.everest-preview+json" \
-          -H "Authorization: token ${{ secrets.TOKEN_KIDDIN9 }}" \
-          -d '{"event_type": "ramips_mt7621 ${{ github.event.inputs.param }}", "client_payload": {"target": "ramips_mt7621"}}'
-          curl \
-          -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -H "Accept: application/vnd.github.everest-preview+json" \
-          -H "Authorization: token ${{ secrets.TOKEN_KIDDIN9 }}" \
-          -d '{"event_type": "ramips_mt7620 ${{ github.event.inputs.param }}", "client_payload": {"target": "ramips_mt7620"}}'
-          curl \
-          -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -H "Accept: application/vnd.github.everest-preview+json" \
-          -H "Authorization: token ${{ secrets.TOKEN_KIDDIN9 }}" \
-          -d '{"event_type": "ramips_mt76x8 ${{ github.event.inputs.param }}", "client_payload": {"target": "ramips_mt76x8"}}'
-          curl \
-          -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -H "Accept: application/vnd.github.everest-preview+json" \
-          -H "Authorization: token ${{ secrets.TOKEN_KIDDIN9 }}" \
-          -d '{"event_type": "qualcommax_ipq807x ${{ github.event.inputs.param }}", "client_payload": {"target": "qualcommax_ipq807x"}}'
-          curl \
-          -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -H "Accept: application/vnd.github.everest-preview+json" \
-          -H "Authorization: token ${{ secrets.TOKEN_KIDDIN9 }}" \
-          -d '{"event_type": "ipq40xx_generic ${{ github.event.inputs.param }}", "client_payload": {"target": "ipq40xx_generic"}}'
-          curl \
-          -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -H "Accept: application/vnd.github.everest-preview+json" \
-          -H "Authorization: token ${{ secrets.TOKEN_KIDDIN9 }}" \
-          -d '{"event_type": "ipq806x_generic ${{ github.event.inputs.param }}", "client_payload": {"target": "ipq806x_generic"}}'
-          curl \
-          -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -H "Accept: application/vnd.github.everest-preview+json" \
-          -H "Authorization: token ${{ secrets.TOKEN_KIDDIN9 }}" \
-          -d '{"event_type": "amlogic_meson8b ${{ github.event.inputs.param }}", "client_payload": {"target": "amlogic_meson8b"}}'
-          curl \
-          -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -H "Accept: application/vnd.github.everest-preview+json" \
-          -H "Authorization: token ${{ secrets.TOKEN_KIDDIN9 }}" \
-          -d '{"event_type": "qualcommax_ipq60xx ${{ github.event.inputs.param }}", "client_payload": {"target": "qualcommax_ipq60xx"}}'
-          curl \
-          -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -H "Accept: application/vnd.github.everest-preview+json" \
-          -H "Authorization: token ${{ secrets.TOKEN_KIDDIN9 }}" \
-          -d '{"event_type": "mvebu_cortexa9 ${{ github.event.inputs.param }}", "client_payload": {"target": "mvebu_cortexa9"}}'
-          curl \
-          -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -H "Accept: application/vnd.github.everest-preview+json" \
-          -H "Authorization: token ${{ secrets.TOKEN_KIDDIN9 }}" \
-          -d '{"event_type": "bcm53xx ${{ github.event.inputs.param }}", "client_payload": {"target": "bcm53xx"}}'
-          curl \
-          -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -H "Accept: application/vnd.github.everest-preview+json" \
-          -H "Authorization: token ${{ secrets.TOKEN_KIDDIN9 }}" \
-          -d '{"event_type": "sunxi_cortexa53 ${{ github.event.inputs.param }}", "client_payload": {"target": "sunxi_cortexa53"}}'
-          curl \
-          -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -H "Accept: application/vnd.github.everest-preview+json" \
-          -H "Authorization: token ${{ secrets.TOKEN_KIDDIN9 }}" \
-          -d '{"event_type": "sunxi_cortexa7 ${{ github.event.inputs.param }}", "client_payload": {"target": "sunxi_cortexa7"}}'
-          curl \
-          -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -H "Accept: application/vnd.github.everest-preview+json" \
-          -H "Authorization: token ${{ secrets.TOKEN_KIDDIN9 }}" \
-          -d '{"event_type": "ath79_nand ${{ github.event.inputs.param }}", "client_payload": {"target": "ath79_nand"}}'
+          -d '{"event_type": "'"${target}"' ${{ github.event.inputs.param }}", "client_payload": {"target": "'"${target}"'"}}'
+        done
